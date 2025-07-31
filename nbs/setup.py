@@ -7,6 +7,13 @@ Jupyter notebook, an Airflow task, a management command prototype) where you
 need the full Django ORM, settings, and apps registry without running the
 traditional `manage.py` entry-point.
 
+.. warning::
+   The helper sets ``DJANGO_ALLOW_ASYNC_UNSAFE=true``.  This disables Django’s
+   async-safety checks and allows ORM queries from the *main* thread even when
+   an asynchronous event loop is already running (e.g. in Jupyter notebooks or
+   IPython).  **Never use this setting in production code or in an async web
+   context**—it can lead to connection leakage and race conditions.
+
 Typical usage
 -------------
 >>> from nbs.setup import init_django
@@ -56,7 +63,10 @@ def init_django(project_name: str = DJANGO_PROJECT_SETTINGS_NAME) -> None:
     3. Sets the environment variable ``DJANGO_SETTINGS_MODULE`` to
        ``<project_name>.settings``.  This is the canonical way to tell Django
        which settings file to load.
-    4. Calls ``django.setup()``, which populates the apps registry, configures
+    4. **Sets** ``DJANGO_ALLOW_ASYNC_UNSAFE=true`` **to allow ORM usage from
+       the main thread inside async contexts such as Jupyter notebooks.**
+       This is safe only for exploratory work; never enable it in production.
+    5. Calls ``django.setup()``, which populates the apps registry, configures
        logging, and performs other start-up duties normally handled by
        ``manage.py``.
 
@@ -64,7 +74,7 @@ def init_django(project_name: str = DJANGO_PROJECT_SETTINGS_NAME) -> None:
     ----------
     project_name : str, optional
         The Python package name of the Django project whose settings should be
-        used.  Defaults to :str: `DJANGO_PROJECT_SETTINGS_NAME`.
+        used.  Defaults to :data:`DJANGO_PROJECT_SETTINGS_NAME`.
 
     Raises
     ------
@@ -82,6 +92,9 @@ def init_django(project_name: str = DJANGO_PROJECT_SETTINGS_NAME) -> None:
 
     # Tell Django which settings module to load.
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", f"{project_name}.settings")
+
+    # Allow ORM usage from the main thread inside async contexts (notebooks).
+    os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = "true"
 
     # Import and initialize Django itself.  This must happen only once per
     # process; subsequent calls are idempotent because django.setup() is
