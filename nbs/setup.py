@@ -41,7 +41,7 @@ will be ``<DJANGO_PROJECT_SETTINGS_NAME>.settings``.
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-def init_django(project_name: str = "sab_home") -> None:
+def init_django(project_name: str = DJANGO_PROJECT_SETTINGS_NAME) -> None:
     """
     Prepare the Python runtime so that Django can be imported and used.
 
@@ -64,7 +64,7 @@ def init_django(project_name: str = "sab_home") -> None:
     ----------
     project_name : str, optional
         The Python package name of the Django project whose settings should be
-        used.  Defaults to :str: `sab_home`.
+        used.  Defaults to :str: `DJANGO_PROJECT_SETTINGS_NAME`.
 
     Raises
     ------
