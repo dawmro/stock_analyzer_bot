@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -73,12 +74,57 @@ WSGI_APPLICATION = 'sab_home.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+# ------------------------------------------------------------------------------
+# DATABASE CONFIGURATION
+# ------------------------------------------------------------------------------
+# This section defines how Django should connect to the backing database(s).
+#
+# Out-of-the-box we ship with **SQLite** for simplicity:
+#   • ENGINE  : Uses Django’s built-in SQLite backend.
+#   • NAME    : Path to the single-file database; placed next to BASE_DIR
+#               so the file ends up at `<project-root>/db.sqlite3`.
+#
+# This is perfect for **local development**, but **NOT** for production.
+# ------------------------------------------------------------------------------
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
     }
 }
+
+# ------------------------------------------------------------------------------
+# ENVIRONMENT-BASED DATABASE SWITCH
+# ------------------------------------------------------------------------------
+# To make the project deploy-ready we support a DATABASE_URL environment
+# variable (Twelve-Factor style).  If present, we override the entire
+# `DATABASES` dict so you can point the app to Postgres, TimescaleDB,
+# MySQL, etc., without touching code.
+#
+# Example env values:
+#   • `postgresql://user:pass@localhost:5432/mydb`
+#   • `timescale://user:pass@localhost:5432/mydb`
+#
+# dj_database_url.parse() will translate the URL into Django’s dictionary
+# format and add sensible defaults.
+#
+# conn_max_age=300 keeps connections alive for 5 minutes to reduce latency
+# under load (works well on PaaS like Heroku, Dokku, Railway, Fly.io, …).
+#
+# engine="timescale.db.backends.postgresql" instructs dj_database_url to
+# use the TimescaleDB backend (Postgres extension for time-series).
+# ------------------------------------------------------------------------------
+DATABASE_URL = config("DATABASE_URL", default="", cast=str)
+if DATABASE_URL != "":
+    import dj_database_url
+
+    DATABASES = {
+        "default": dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=300,                       # Persistent connections
+            engine="timescale.db.backends.postgresql",  # TimescaleDB
+        )
+    }
 
 
 # Password validation
