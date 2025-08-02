@@ -37,7 +37,7 @@ class StockQuote(models.Model):
     volume_weighted_average = models.DecimalField(max_digits=10, decimal_places=4)
     time = TimescaleDateTimeField(interval="1 day")
 
-    # objects = models.Manager()
+    objects = models.Manager()
     timescale = TimescaleManager()
     
  
