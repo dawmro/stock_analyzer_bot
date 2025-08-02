@@ -19,17 +19,29 @@ Design notes
   in data-science scripts.
 - `dataclasses` give us free, type-safe constructors, equality, and reprs
   without boilerplate.
+
+  Rate-limit handling
+-------------------
+- Free tier: **5 requests / minute**.  
+- Internal retry logic respects `Retry-After` (if provided) or uses exponential
+  back-off capped at 60 s.  
+- Worst-case total attempts ≤ 5 in any rolling 60-second window.
 """
+
 
 from __future__ import annotations
 
+import math
 import pytz
 import requests
+import random
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from decouple import config
 from typing import Literal
 from urllib.parse import urlencode
+from requests.exceptions import HTTPError
 
 # --------------------------------------------------------------------------- #
 # Configuration
@@ -38,6 +50,19 @@ from urllib.parse import urlencode
 # Environment variable name matches the provider’s branding (POLYGON) but is
 # prefixed with our project namespace to avoid collisions.
 POLOGYON_API_KEY = config("POLOGYON_API_KEY", default=None, cast=str)
+
+# --------------------------------------------------------------------------- #
+# Constants tied to Polygon’s advertised policy
+# --------------------------------------------------------------------------- #
+_POLYGON_FREE_TIER_RPM = 5                # requests per minute
+_POLYGON_REQUESTS_WINDOW = 60.0           # seconds
+_POLYGON_MIN_INTERVAL = _POLYGON_REQUESTS_WINDOW / _POLYGON_FREE_TIER_RPM  # 12 s
+
+# --------------------------------------------------------------------------- #
+# Custom exception
+# --------------------------------------------------------------------------- #
+class PolygonRateLimitError(RuntimeError):
+    """Raised when retries are exhausted due to HTTP 429."""
 
 # --------------------------------------------------------------------------- #
 # Utilities
@@ -147,15 +172,18 @@ class PolygonAPIClient:
             )
         return key
 
+
     def get_headers(self) -> dict[str, str]:
         """Return HTTP headers required for Bearer-token authentication."""
         api_key = self.get_api_key()
         return {"Authorization": f"Bearer {api_key}"}
 
+
     def get_params(self) -> dict[str, object]:
         """Return query parameters common to every request."""
         return {"adjusted": self.adjusted, "sort": self.sort}
     
+
     # --------------------------------------------------------------------- #
     # Public interface
     # --------------------------------------------------------------------- #
@@ -186,22 +214,59 @@ class PolygonAPIClient:
             url += f"&api_key={api_key}"
         return url
 
-    def fetch_data(self) -> dict:
+
+    def fetch_data(
+        self,
+        max_retries: int = 4,  # 1 initial + 4 retries = 5 requests max
+    ) -> dict[str, any]:
         """
         Execute the HTTP request and return raw JSON.
 
+        Implements polite back-off for HTTP 429 (rate limit).
+
+        Parameters
+        ----------
+        max_retries : int
+            Maximum **additional** attempts after the first failure.
+
         Raises
         ------
+        PolygonRateLimitError
+            If we are still throttled after retries.
         requests.HTTPError
-            For any non-2xx response.  Callers can inspect `response.status_code`
-            for fine-grained error handling.
+            For any non-429 or unexpected HTTP error.
         """
-        headers = self._headers()
+        headers = self.get_headers()
         url = self.generate_url()
 
-        response = requests.get(url, headers=headers, timeout=30)
-        response.raise_for_status()
-        return response.json()
+        attempt = 0
+        while True:
+            response = requests.get(url, headers=headers, timeout=30)
+
+            if response.status_code != 429:
+                response.raise_for_status()
+                return response.json()
+
+            # Rate-limited --------------------------------------------------- #
+            if attempt >= max_retries:
+                raise PolygonRateLimitError(
+                    f"Rate-limited by Polygon after {max_retries + 1} attempts."
+                )
+
+            # Honour Retry-After if provided, otherwise self-throttle
+            retry_after = response.headers.get("Retry-After")
+            if retry_after is not None and retry_after.isdigit():
+                delay = int(retry_after)
+            else:
+                # Exponential back-off capped at one full window
+                delay = min(
+                    _POLYGON_REQUESTS_WINDOW,
+                    _POLYGON_MIN_INTERVAL * (2 ** attempt) * random.uniform(0.9, 1.1),
+                )
+
+            time.sleep(delay)
+            attempt += 1
+
 
     def get_stock_data(self) -> list[dict]:
         """
