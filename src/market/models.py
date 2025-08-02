@@ -1,5 +1,6 @@
 from django.db import models
-
+from timescale.db.models.fields import TimescaleDateTimeField
+from timescale.db.models.managers import TimescaleManager
 
 # Create your models here.
 class Company(models.Model):
@@ -11,6 +12,32 @@ class Company(models.Model):
     updated = models.DateTimeField(auto_now=True)
 
 
+class StockQuote(models.Model):
+    """
+    'open_price': 93758,
+    'close_price': 94757,
+    'high_price': 95287,
+    'low_price': 93072,
+    'number_of_trades': 18517,
+    'volume': 546.4188032799949,
+    'volume_weighted_average': 93954.3074,
+    'time': datetime.datetime(2025, 1, 1, 0, 0, tzinfo=<UTC>)
+    """
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="stock_quotes"
+    )
+    open_price = models.DecimalField(max_digits=10, decimal_places=4)
+    close_price = models.DecimalField(max_digits=10, decimal_places=4)
+    high_price = models.DecimalField(max_digits=10, decimal_places=4)
+    low_price = models.DecimalField(max_digits=10, decimal_places=4)
+    number_of_trades = models.BigIntegerField(blank=True, null=True)
+    volume = models.DecimalField(max_digits=18, decimal_places=4)
+    volume_weighted_average = models.DecimalField(max_digits=10, decimal_places=4)
+    time = TimescaleDateTimeField(interval="1 day")
 
+    # objects = models.Manager()
+    timescale = TimescaleManager()
     
  
