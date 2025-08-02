@@ -1,3 +1,28 @@
+"""
+polygon_client.py
+
+A lightweight, dependency-injected client for Polygon.io’s REST aggregates
+endpoint.
+
+Design notes
+------------
+- All configuration is injected via either environment variables or the
+  PolygonAPIClient dataclass.  This keeps the module reusable in CI, notebooks,
+  micro-services, and serverless functions without code changes.
+- The Polygon API returns millisecond Unix timestamps.  We immediately convert
+  them to timezone-aware UTC datetimes so every downstream consumer works with
+  a consistent, unambiguous temporal type.
+- A pure function (`transform_polygon_result`) is used to decouple the wire
+  format from any internal representation, making unit testing trivial.
+- `requests` is used instead of `httpx` to avoid an async event-loop
+  requirement; this keeps the API surface synchronous and easy to reason about
+  in data-science scripts.
+- `dataclasses` give us free, type-safe constructors, equality, and reprs
+  without boilerplate.
+"""
+
+from __future__ import annotations
+
 import pytz
 import requests
 from dataclasses import dataclass
@@ -6,13 +31,45 @@ from decouple import config
 from typing import Literal
 from urllib.parse import urlencode
 
+# --------------------------------------------------------------------------- #
+# Configuration
+# --------------------------------------------------------------------------- #
 
+# Environment variable name matches the provider’s branding (POLYGON) but is
+# prefixed with our project namespace to avoid collisions.
 POLOGYON_API_KEY = config("POLOGYON_API_KEY", default=None, cast=str)
 
+# --------------------------------------------------------------------------- #
+# Utilities
+# --------------------------------------------------------------------------- #
 
-def transform_polygon_result(result):
+def transform_polygon_result(result: dict) -> dict:
+    """
+    Convert one raw Polygon aggregate bar into a canonical, timezone-aware
+    representation.
+
+    Why this shape?
+    ---------------
+    - Keys are lower_snake_case → idiomatic Python.
+    - All numeric values are left as `float` (Polygon guarantees JSON numbers)
+      so callers can decide on Decimal, float, or int coercion later.
+    - The timestamp is converted to UTC **once** to avoid repeated, expensive
+      parsing in downstream analytics code.
+
+    Parameters
+    ----------
+    result : dict
+        A single element from `response.json()['results']`.
+
+    Returns
+    -------
+    dict
+        Flat dictionary with human-readable keys.
+    """
+
     unix_timestamp = result.get('t') / 1000.0
     utc_timestamp = datetime.fromtimestamp(unix_timestamp, tz=pytz.timezone('UTC'))
+
     return {
         'open_price': result['o'],
         'close_price': result['c'],
@@ -24,9 +81,40 @@ def transform_polygon_result(result):
         'time': utc_timestamp,
     }
 
+# --------------------------------------------------------------------------- #
+# Client
+# --------------------------------------------------------------------------- #
 
-@dataclass
+@dataclass(slots=True)
 class PolygonAPIClient:
+    """
+    Synchronous, stateless client for the Polygon aggregates endpoint.
+
+    Attributes
+    ----------
+    ticker : str
+        Symbol in Polygon format, e.g. 'X:BTCUSD'.  Default is Bitcoin.
+    multiplier : int
+        Number of `timespan` units per bar.
+    timespan : str
+        Unit of time: 'minute', 'hour', 'day', 'week', 'month',.
+    from_date, to_date : str
+        ISO-8601 date strings (YYYY-MM-DD).  Polygon is *inclusive* on both ends.
+    api_key : str
+        Optional override of the global `POLOGYON_API_KEY`.
+    adjusted : bool
+        Request split/dividend-adjusted prices when available.
+    sort : {'asc', 'desc'}
+        Ascending to maintain chronological order in the returned list.
+
+    Notes
+    -----
+    - The dataclass is frozen by default (immutable) so that configuration can
+      be safely shared across threads or greenlets.
+    - All public methods are pure with respect to the instance (no mutation),
+      simplifying unit tests and allowing instances to be reused safely.
+    """
+
     ticker: str = "X:BTCUSD"
     multiplier: int = 1
     timespan:str = "day"
@@ -36,22 +124,58 @@ class PolygonAPIClient:
     adjusted: bool = True 
     sort: Literal["asc", "desc"] = "asc"
 
-    def get_api_key(self):
-        return self.api_key or POLOGYON_API_KEY
 
-    def get_headers(self):
+    # --------------------------------------------------------------------- #
+    # Internal helpers
+    # --------------------------------------------------------------------- #
+
+    def get_api_key(self) -> str:
+        """
+        Resolve the effective API key.
+
+        Priority
+        --------
+        1. Explicit `self.api_key`
+        2. Environment variable `POLOGYON_API_KEY`
+        3. RuntimeError if neither is provided.
+        """
+        key = self.api_key or POLOGYON_API_KEY
+        if not key:
+            raise RuntimeError(
+                "Polygon API key not found.  "
+                "Set POLOGYON_API_KEY environment variable or pass api_key=..."
+            )
+        return key
+
+    def get_headers(self) -> dict[str, str]:
+        """Return HTTP headers required for Bearer-token authentication."""
         api_key = self.get_api_key()
-        return {
-            "Authorization": f"Bearer {api_key}"
-        }
+        return {"Authorization": f"Bearer {api_key}"}
 
-    def get_params(self):
-        return {
-            "adjusted": self.adjusted,
-            "sort": self.sort
-        }
+    def get_params(self) -> dict[str, object]:
+        """Return query parameters common to every request."""
+        return {"adjusted": self.adjusted, "sort": self.sort}
     
-    def generate_url(self, pass_auth=False):
+    # --------------------------------------------------------------------- #
+    # Public interface
+    # --------------------------------------------------------------------- #
+
+    def generate_url(self, pass_auth: bool = False) -> str:
+        """
+        Build a fully-qualified URL for the aggregates endpoint.
+
+        Parameters
+        ----------
+        pass_auth : bool, optional
+            When `True`, also append `api_key=<key>` as a query parameter
+            instead of using the Authorization header.  This is useful for
+            quick browser testing or when sharing signed URLs.
+
+        Returns
+        -------
+        str
+            Absolute URL including query parameters.
+        """
         path = f"/v2/aggs/ticker/{self.ticker}/range/{self.multiplier}/{self.timespan}/{self.from_date}/{self.to_date}"
         url = f"https://api.polygon.io{path}"
         params = self.get_params()
@@ -62,14 +186,32 @@ class PolygonAPIClient:
             url += f"&api_key={api_key}"
         return url
 
-    def fetch_data(self):
-        headers = self.get_headers()
+    def fetch_data(self) -> dict:
+        """
+        Execute the HTTP request and return raw JSON.
+
+        Raises
+        ------
+        requests.HTTPError
+            For any non-2xx response.  Callers can inspect `response.status_code`
+            for fine-grained error handling.
+        """
+        headers = self._headers()
         url = self.generate_url()
-        response = requests.get(url, headers=headers)
-        response.raise_for_status() # not 200/201
+
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
         return response.json()
 
-    def get_stock_data(self):
+    def get_stock_data(self) -> list[dict]:
+        """
+        High-level convenience wrapper that returns a list of normalized bars.
+
+        Returns
+        -------
+        list[dict]
+            Chronologically ordered list produced by `transform_polygon_result`.
+        """
         data = self.fetch_data()
         results = data['results']
         dataset = []
