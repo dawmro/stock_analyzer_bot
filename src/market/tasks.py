@@ -22,7 +22,7 @@ def sync_company_stock_quotes(company_id, days_ago=3, date_format="%Y-%m-%d", ve
         raise Exception(f"Company ticker: {ticker} invalid.")
 
     multiplier = 1
-    timespan = "day"
+    timespan = "minute"
     days_ago = 3
     end_date = timezone.now()
     start_date = end_date - timedelta(days=days_ago)
