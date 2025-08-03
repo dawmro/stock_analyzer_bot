@@ -204,7 +204,8 @@ class PolygonAPIClient:
         str
             Absolute URL including query parameters.
         """
-        path = f"/v2/aggs/ticker/{self.ticker}/range/{self.multiplier}/{self.timespan}/{self.from_date}/{self.to_date}"
+        ticker = f"{self.ticker}".upper()
+        path = f"/v2/aggs/ticker/{ticker}/range/{self.multiplier}/{self.timespan}/{self.from_date}/{self.to_date}"
         url = f"https://api.polygon.io{path}"
         params = self.get_params()
         encoded_params = urlencode(params)
