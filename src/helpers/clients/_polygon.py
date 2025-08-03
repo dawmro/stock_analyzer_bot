@@ -279,7 +279,10 @@ class PolygonAPIClient:
             Chronologically ordered list produced by `transform_polygon_result`.
         """
         data = self.fetch_data()
-        results = data['results']
+        results = data.get('results', None)
+        if results is None or len(results) == 0:
+            raise Exception(f"Polygon API returned no results for {self.ticker}")
+
         dataset = []
         for result in results:
             dataset.append(
