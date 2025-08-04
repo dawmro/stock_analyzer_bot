@@ -1,6 +1,6 @@
 from django.apps import apps
 
-def batch_insert_stock_data(dataset, company_obj=None, batch_size=100, verbose=False):
+def batch_insert_stock_data(dataset, company_obj=None, batch_size=1000, verbose=False):
     """
     Batch inserts stock quote data into the database using bulk operations for efficiency.
     
@@ -11,7 +11,7 @@ def batch_insert_stock_data(dataset, company_obj=None, batch_size=100, verbose=F
     Args:
         dataset (list): List of dictionaries containing stock quote data fields
         company_obj (Company): Django model instance representing the associated company
-        batch_size (int): Intended batch size (currently overridden to fixed 100)
+        batch_size (int): Intended batch size 
         verbose (bool): Enable progress output if True
         
     Returns:
@@ -26,15 +26,11 @@ def batch_insert_stock_data(dataset, company_obj=None, batch_size=100, verbose=F
     
     # Get StockQuote model reference
     StockQuote = apps.get_model('market', 'StockQuote')
-    
-    # NOTE: Batch size is currently hardcoded to 100 regardless of input parameter
-    # This overrides the default parameter value and any passed argument
-    batch_size = 100
-    
+        
     # Process dataset in batches
     for i in range(0, len(dataset), batch_size):
         if verbose:
-            print(f"Processing batch: {i} to {i + batch_size}")
+            print(f"Processing batch: {i} to {i + batch_size} for {company_obj}")
         
         # Extract current batch chunk
         batch_chunk = dataset[i:i + batch_size]
@@ -53,7 +49,9 @@ def batch_insert_stock_data(dataset, company_obj=None, batch_size=100, verbose=F
         StockQuote.objects.bulk_create(chunked_quotes, ignore_conflicts=True)
         
         if verbose:
-            print(f"Completed batch: {i} to {i + batch_size}")
+            print(f"Completed batch: {i} to {i + batch_size} for {company_obj}")
+    if verbose:
+            print(f"Processed {len(dataset)} data points for {company_obj}")
     
     # Return total processed records count
     return len(dataset)
