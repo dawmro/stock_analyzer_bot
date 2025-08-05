@@ -10,7 +10,7 @@ from datetime import timedelta
     
 
 @shared_task
-def sync_company_stock_quotes(company_id, days_ago=3, date_format="%Y-%m-%d", verbose=True):
+def sync_company_stock_quotes(company_id, days_ago=32, date_format="%Y-%m-%d", verbose=True):
     Company = apps.get_model('market', 'Company')
     try:
         company_obj = Company.objects.get(id=company_id)
@@ -24,7 +24,6 @@ def sync_company_stock_quotes(company_id, days_ago=3, date_format="%Y-%m-%d", ve
 
     multiplier = 1
     timespan = "minute"
-    days_ago = 3
     end_date = timezone.now()
     start_date = end_date - timedelta(days=days_ago)
     from_date = start_date.strftime(date_format)
@@ -44,7 +43,7 @@ def sync_company_stock_quotes(company_id, days_ago=3, date_format="%Y-%m-%d", ve
 
 
 @shared_task    
-def sync_stock_data():
+def sync_stock_data(days_ago = 2):
     Company = apps.get_model('market', 'Company')
     companies = Company.objects.filter(active=True).values_list('id', flat=True)
     for company_id in companies:
