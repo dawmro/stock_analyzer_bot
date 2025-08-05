@@ -4,9 +4,14 @@ docker compose up -d
 
 
 celery -A sab_home worker -l info
+celery -A sab_home beat
+or
+celery -A sab_home worker -l info --beat
 
 
 python manage.py runserver
 python manage.py createsuperuser
 
 http://127.0.0.1:8000/admin
+
+
