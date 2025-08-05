@@ -181,7 +181,7 @@ class PolygonAPIClient:
 
     def get_params(self) -> dict[str, object]:
         """Return query parameters common to every request."""
-        return {"adjusted": self.adjusted, "sort": self.sort}
+        return {"adjusted": self.adjusted, "sort": self.sort, "limit": 50_000}
     
 
     # --------------------------------------------------------------------- #
