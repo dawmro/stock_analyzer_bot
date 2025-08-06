@@ -103,6 +103,7 @@ def transform_polygon_result(result: dict) -> dict:
         'number_of_trades': result['n'],
         'volume': result['v'],
         'volume_weighted_average': result['vw'],
+        'raw_timestamp': result.get('t'),
         'time': utc_timestamp,
     }
 

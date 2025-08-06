@@ -22,7 +22,7 @@ class StockQuoteAdmin(admin.ModelAdmin):
         ('time', DateTimeRangeFilterBuilder()),
         'time'
         ]
-    readonly_fields = ['localized_time', 'time']
+    readonly_fields = ['localized_time', 'raw_timestamp', 'time']
     
     def company_ticker(self, obj):
         return obj.company.ticker

@@ -28,6 +28,7 @@ class StockQuote(models.Model):
     'number_of_trades': 18517,
     'volume': 546.4188032799949,
     'volume_weighted_average': 93954.3074,
+    'raw_timestamp': 987654323,
     'time': datetime.datetime(2025, 1, 1, 0, 0, tzinfo=<UTC>)
     """
     company = models.ForeignKey(
@@ -42,6 +43,7 @@ class StockQuote(models.Model):
     number_of_trades = models.BigIntegerField(blank=True, null=True)
     volume = models.DecimalField(max_digits=18, decimal_places=4)
     volume_weighted_average = models.DecimalField(max_digits=10, decimal_places=4)
+    raw_timestamp = models.CharField(max_length=100, blank=True, null=True)
     time = TimescaleDateTimeField(interval="1 day")
 
     objects = models.Manager()
