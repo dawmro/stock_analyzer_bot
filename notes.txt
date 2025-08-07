@@ -3,16 +3,19 @@ docker compose up -d
 
 
 python manage.py migrate
-python manage.py runserver
 python manage.py createsuperuser
+python manage.py runserver
 
 
-celery -A sab_home worker -l info
 celery -A sab_home beat
+celery -A sab_home worker -l info
 or when not on windows:
 celery -A sab_home worker -l info --beat
 
 
 http://127.0.0.1:8000/admin
+
+
+jupyter nbconvert "filename.ipynb" --to script
 
 
