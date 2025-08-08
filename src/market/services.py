@@ -412,18 +412,32 @@ def get_stock_indicators(ticker: str = "X:BTCUSD", days: int = 30) -> Dict:
         raise Exception(f"Data for {ticker} not found")
     
     # Get indicators with error handling
-    averages = get_daily_moving_averages(ticker, days=days, queryset=queryset) or {}
-    price_target = get_price_target(ticker, days=days) or {}
-    volume_trend_daily = get_volume_trend_daily(ticker, days=days, queryset=queryset) or {}
-    rsi_data = calculate_rsi(ticker, period=14) or {}
-    
+    averages = get_daily_moving_averages(ticker)
+    price_target = get_price_target(ticker, days=days, queryset=queryset)
+    volume_trend_daily = get_volume_trend_daily(ticker, days=days, queryset=queryset)
+    rsi_data = calculate_rsi(ticker)
     signals = []
     
     # Moving average crossover signal
-    if averages.get('ma_5', 0) > averages.get('ma_20', 0):
-        signals.append(1)  # Bullish
+    if averages.get('ma_5') > averages.get('ma_20'):
+        signals.append(1) # Bullish
     else:
-        signals.append(-1)  # Bearish
+        signals.append(-1) # Bearish
+
+    if averages.get('ma_20') > averages.get('ma_50'):
+        signals.append(1) # Bullish
+    else:
+        signals.append(-1) # Bearish
+
+    if averages.get('ma_50') > averages.get('ma_100'):
+        signals.append(1) # Bullish
+    else:
+        signals.append(-1) # Bearish
+
+    if averages.get('ma_100') > averages.get('ma_200'):
+        signals.append(1) # Bullish
+    else:
+        signals.append(-1) # Bearish
     
     # Price target signal
     current_price = price_target.get('current_price', 0)
@@ -452,6 +466,7 @@ def get_stock_indicators(ticker: str = "X:BTCUSD", days: int = 30) -> Dict:
         signals.append(0)  # Neutral
     
     return {
+        "days": days,
         "score": sum(signals),
         "ticker": ticker,
         "indicators": {
