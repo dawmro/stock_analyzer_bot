@@ -21,26 +21,29 @@ from decimal import Decimal
 
 from market.models import StockQuote
 
+import datetime
+
 
 # Constants for signal thresholds
 VOLUME_CHANGE_THRESHOLD = 20
 RSI_OVERBOUGHT = 70
 RSI_OVERSOLD = 30
 
-def get_stock_quotes_queryset(ticker: str, days: int = 28):
+def get_stock_quotes_queryset(ticker: str, days: int = 28, end_date: datetime = None):
     """
     Retrieve stock quotes for a given ticker within a date range.
     
     Args:
         ticker: Stock ticker symbol
         days: Number of days to retrieve (default: 28)
+        end_date: End date for the range (default: current time)
     
     Returns:
         QuerySet of StockQuote objects
     """
-    now = timezone.now()
-    start_date = now - timedelta(days=days)
-    end_date = now
+    if end_date is None:
+        end_date = timezone.now()
+    start_date = end_date - timedelta(days=days)
 
     # Get full queryset (Ensure we have enough data +1 day)
     qs = StockQuote.objects.filter(
@@ -222,13 +225,13 @@ def get_price_target(ticker: str, days: int = 180, queryset=None) -> Optional[Di
         'period_low': float(lowest)
     }
 
-def get_daily_moving_averages(ticker: str, days: int = 200, queryset=None) -> Dict[str, Optional[float]]:
+def get_daily_moving_averages(ticker: str, days: int = 30, queryset=None) -> Dict[str, Optional[float]]:
     """
-    Calculate moving averages (5-day, 20-day, 50-day, 100-day, 200-day) using the last closing price of each day.
+    Calculate moving averages (5-day, 20-day) using the last closing price of each day.
 
     Args:
         ticker: Stock ticker
-        days: Days to retrieve (default: 200)
+        days: Days to retrieve (default: 30)
         queryset: Optional pre-filtered queryset
 
     Returns:
@@ -240,10 +243,7 @@ def get_daily_moving_averages(ticker: str, days: int = 200, queryset=None) -> Di
     # Define window sizes and corresponding output keys
     window_specs = [
         (5, 'ma_5'),
-        (20, 'ma_20'),
-        (50, 'ma_50'),
-        (100, 'ma_100'),
-        (200, 'ma_200')
+        (20, 'ma_20')
     ]
     
     # Aggregate to get the last closing price for each day
@@ -274,9 +274,9 @@ def get_daily_moving_averages(ticker: str, days: int = 200, queryset=None) -> Di
     return results
 
 
-def calculate_rsi(ticker: str, period: int = 14) -> Dict:
+def calculate_rsi(ticker: str, period: int = 14, as_of_date: datetime = None) -> Dict:
     """
-    Calculate Relative Strength Index (RSI) using Wilder's method.
+    Calculate Relative Strength Index (RSI) using Wilder's method as of a specific date.
     
     Steps:
     1. Get daily closing prices
@@ -289,6 +289,7 @@ def calculate_rsi(ticker: str, period: int = 14) -> Dict:
     Args:
         ticker: Stock ticker
         period: RSI period (default: 14)
+        as_of_date: Date to calculate RSI as of (default: current time)
     
     Returns:
         RSI data dict with possible error message
@@ -300,7 +301,9 @@ def calculate_rsi(ticker: str, period: int = 14) -> Dict:
             'period': period
         }
     
-    end_date = timezone.now()
+    if as_of_date is None:
+        as_of_date = timezone.now()
+    end_date = as_of_date
     start_date = end_date - timedelta(days=period * 4)  # Extra data buffer
     
     # Get daily data with time_bucket
@@ -390,9 +393,9 @@ def calculate_rsi(ticker: str, period: int = 14) -> Dict:
         'period': period
     }
 
-def get_stock_indicators(ticker: str = "X:BTCUSD", days: int = 30) -> Dict:
+def get_stock_indicators(ticker: str = "X:BTCUSD", days: int = 30, as_of_date: datetime = None) -> Optional[Dict]:
     """
-    Aggregate stock indicators into a single score.
+    Aggregate stock indicators into a single score as of a specific date.
     
     Combines:
     - Moving averages 
@@ -403,38 +406,27 @@ def get_stock_indicators(ticker: str = "X:BTCUSD", days: int = 30) -> Dict:
     Args:
         ticker: Stock ticker (default: X:BTCUSD)
         days: Analysis period (default: 30)
+        as_of_date: Date to calculate indicators as of (default: current time)
     
     Returns:
         Aggregated indicator results with composite score
     """
-    queryset = get_stock_quotes_queryset(ticker, days=days)
+    if as_of_date is None:
+        as_of_date = timezone.now()
+    
+    queryset = get_stock_quotes_queryset(ticker, days=days, end_date=as_of_date)
     if queryset.count() == 0:
         raise Exception(f"Data for {ticker} not found")
     
     # Get indicators with error handling
-    averages = get_daily_moving_averages(ticker)
+    averages = get_daily_moving_averages(ticker, queryset=queryset)
     price_target = get_price_target(ticker, days=days, queryset=queryset)
     volume_trend_daily = get_volume_trend_daily(ticker, days=days, queryset=queryset)
-    rsi_data = calculate_rsi(ticker)
+    rsi_data = calculate_rsi(ticker, as_of_date=as_of_date)
     signals = []
     
     # Moving average crossover signal
     if averages.get('ma_5') > averages.get('ma_20'):
-        signals.append(1) # Bullish
-    else:
-        signals.append(-1) # Bearish
-
-    if averages.get('ma_20') > averages.get('ma_50'):
-        signals.append(1) # Bullish
-    else:
-        signals.append(-1) # Bearish
-
-    if averages.get('ma_50') > averages.get('ma_100'):
-        signals.append(1) # Bullish
-    else:
-        signals.append(-1) # Bearish
-
-    if averages.get('ma_100') > averages.get('ma_200'):
         signals.append(1) # Bullish
     else:
         signals.append(-1) # Bearish
