@@ -4,9 +4,9 @@ import math
 from celery import shared_task
 from django.apps import apps
 from django.utils import timezone
-
-from .utils import batch_insert_stock_data
-from datetime import timedelta
+from datetime import timedelta, timezone as datetime_timezone
+from .services import get_stock_indicators
+from .utils import batch_insert_stock_data, batch_insert_stock_indicators
 
 
 @shared_task
@@ -61,24 +61,32 @@ def sync_company_stock_quotes(company_id, days_ago=32, batch_days_size=32, date_
     to_date = start_date + timedelta(days=batch_days_size + 1)
     to_date = to_date.strftime(date_format)
 
-    # Initialize Polygon API client and fetch data
-    client = helper_clients.PolygonAPIClient(
-        ticker=ticker, 
-        multiplier=multiplier,
-        timespan=timespan,
-        from_date=from_date, 
-        to_date=to_date
-    )
-    dataset = client.get_stock_data()
-    
-    if verbose:
-        print(f"Syncing {len(dataset)} stock quotes for {ticker} from {from_date} to {to_date}...")
-    
-    # Insert fetched data into database
-    batch_insert_stock_data(dataset=dataset, company_obj=company_obj, verbose=verbose)
-    
-    if verbose:
-        print(f"Done syncing {len(dataset)} stock quotes for {ticker} from {from_date} to {to_date}.")
+    # Initialize Polygon API client and fetch data with error handling
+    try:
+        client = helper_clients.PolygonAPIClient(
+            ticker=ticker, 
+            multiplier=multiplier,
+            timespan=timespan,
+            from_date=from_date, 
+            to_date=to_date
+        )
+        dataset = client.get_stock_data()
+        
+        if verbose:
+            print(f"Syncing {len(dataset)} stock quotes for {ticker} from {from_date} to {to_date}...")
+        
+        # Insert fetched data into database
+        batch_insert_stock_data(dataset=dataset, company_obj=company_obj, verbose=verbose)
+        
+        if verbose:
+            print(f"Done syncing {len(dataset)} stock quotes for {ticker} from {from_date} to {to_date}.")
+            
+    except Exception as e:
+        # Handle API errors
+        error_msg = f"Failed to sync stock quotes for {ticker}: {str(e)}"
+        if verbose:
+            print(error_msg)
+        raise Exception(error_msg)
 
 
 @shared_task    
@@ -161,3 +169,111 @@ def sync_historical_stock_data(years_ago=2, company_ids=[], verbose=True):
                 days_ago=i, 
                 batch_days_size=batch_days_size
             )
+
+@shared_task
+def generate_historical_indicators(n_days=700, verbose=True):
+    """
+    Generate historical stock indicators for all active companies
+    by running get_stock_indicators for each day going back n_days.
+    Skips days that already have indicator data and uses batch insertion.
+    """
+    # Avoid circular imports by using apps.get_model
+    Company = apps.get_model('market', 'Company')
+    StockIndicator = apps.get_model('market', 'StockIndicator')
+    
+    if verbose:
+        print("Starting historical indicators generation...")
+    
+    # Get all active companies
+    companies = Company.objects.filter(active=True)
+    if verbose:
+        print(f"Processing {companies.count()} active companies")
+    
+    # Calculate date range (n_days back from now)
+    end_date = timezone.now()
+    start_date = end_date - timedelta(days=n_days)
+    total_days = (end_date - start_date).days + 1
+    
+    if verbose:
+        print(f"Processing {total_days} days from {start_date} to {end_date}")
+    
+        # Prefetch existing indicator dates as date objects (without time)
+        existing_dates = {}
+        for company in companies:
+            dates = set(StockIndicator.objects.filter(
+                company=company,
+                time__date__range=(start_date.date(), end_date.date())
+            ).dates('time', 'day'))
+            existing_dates[company.id] = dates
+        
+        # Iterate through each company
+        for company in companies:
+            if verbose:
+                print(f"Processing company: {company.ticker}")
+            
+            indicators_to_insert = []
+            skipped_days = 0
+            
+            # Get existing dates for this company
+            company_existing_dates = existing_dates.get(company.id, set())
+            
+            # Iterate through each day in range for this company
+            current_date = start_date
+            day_count = 0
+            while current_date <= end_date:
+                day_count += 1
+                # Print progress every 100 day
+                if verbose and day_count % 100 == 0:
+                    print(f"Processed {day_count} days for {company.ticker} so far...")
+                
+                # Check if indicator already exists using pre-fetched data
+                if current_date.date() in company_existing_dates:
+                    skipped_days += 1
+                    current_date += timedelta(days=1)
+                    continue
+                    
+                try:
+                    # Set evaluation time to end of day in UTC
+                    eval_time = current_date.replace(
+                        hour=23, minute=59, second=59, microsecond=0, tzinfo=datetime_timezone.utc
+                    )
+                    # Get indicators as of this historical date
+                    result = get_stock_indicators(
+                        ticker=company.ticker,
+                        days=30,  # Use default lookback period
+                        as_of_date=eval_time
+                    )
+                    
+                    if result is None:
+                        if verbose:
+                            print(f"Skipping {company.ticker} on {current_date}: get_stock_indicators returned None")
+                        continue
+                    
+                    # Prepare data for batch insertion
+                    indicators_to_insert.append({
+                        'time': eval_time,
+                        'score': result['score'],
+                        'indicators': result['indicators']
+                    })
+                    
+                except Exception as e:
+                    # Handle errors per company/date
+                    print(f"Error for {company.ticker} on {current_date}: {str(e)}")
+                
+                current_date += timedelta(days=1)
+            
+            # Batch insert indicators for this company
+            if indicators_to_insert:
+                processed = batch_insert_stock_indicators(
+                    indicators_to_insert, 
+                    company_obj=company,
+                    verbose=verbose
+                )
+                if verbose:
+                    print(f"Inserted {processed} indicators for {company.ticker}")
+            
+            if verbose:
+                print(f"Skipped {skipped_days} days for {company.ticker} (already exists)")
+        
+    if verbose:
+        print("Finished generating historical indicators")
