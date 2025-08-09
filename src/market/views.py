@@ -14,12 +14,14 @@ def stock_chart_view(request):
 
 def stock_data_api(request, ticker="X:BTCUSD"):
     """
-    API endpoint to get daily aggregated stock data for visualization
+    API endpoint to get stock data for visualization
     Default ticker: X:BTCUSD
+    Query parameters:
+        days: Number of days to retrieve (default: 30)
     Returns JSON with:
         - dates: list of dates (YYYY-MM-DD)
-        - daily_data: list of {open, high, low, close} objects
-        - volumes: list of daily volumes
+        - prices: list of closing prices
+        - volumes: list of volumes
         - scores: list of indicator scores
         - indicators: dict of indicator values (ma_5, ma_20, rsi)
     """
@@ -29,9 +31,18 @@ def stock_data_api(request, ticker="X:BTCUSD"):
     except Company.DoesNotExist:
         return JsonResponse({"error": "Company not found"}, status=404)
     
-    # Calculate date range (last 30 days)
+    # Get days parameter from request
+    try:
+        days = int(request.GET.get('days', 30))
+    except ValueError:
+        days = 30
+    
+    # Validate days range
+    days = max(1, min(days, 700))  # Limit to 1-700 days
+    
+    # Calculate date range
     end_date = timezone.now()
-    start_date = end_date - timedelta(days=30)
+    start_date = end_date - timedelta(days=days)
     
     # Get daily aggregated stock quotes
     daily_quotes = (

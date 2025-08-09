@@ -30,6 +30,9 @@
         .signal-buy { color: green; }
         .signal-sell { color: red; }
         .signal-hold { color: gray; }
+        .days-selector {
+            margin: 0 10px;
+        }
     </style>
 </head>
 <body>
@@ -37,6 +40,15 @@
         <select id="company-selector">
             <option value="X:BTCUSD">X:BTCUSD</option>
         </select>
+        
+        <select id="days-selector" class="days-selector">
+            <option value="30">30 days</option>
+            <option value="60">60 days</option>
+            <option value="180">180 days</option>
+            <option value="365">1 year</option>
+            <option value="700">700 days</option>
+        </select>
+        
         <div class="signal-info">
             <span class="signal-buy">▲ Buy</span> | 
             <span class="signal-sell">▼ Sell</span> | 
@@ -59,6 +71,7 @@
     <script>
         // DOM elements
         const companySelector = document.getElementById('company-selector');
+        const daysSelector = document.getElementById('days-selector');
         const priceChartCtx = document.getElementById('price-chart').getContext('2d');
         const volumeChartCtx = document.getElementById('volume-chart').getContext('2d');
         const rsiChartCtx = document.getElementById('rsi-chart').getContext('2d');
@@ -88,9 +101,9 @@
         }
         
         // Fetch data and render chart
-        async function loadData(ticker = 'X:BTCUSD') {
+        async function loadData(ticker = 'X:BTCUSD', days = 30) {
             try {
-                const response = await fetch(`/market/api/stock-data/${ticker}/`);
+                const response = await fetch(`/market/api/stock-data/${ticker}/?days=${days}`);
                 const data = await response.json();
                 
                 if (data.error) {
@@ -109,6 +122,7 @@
             // Destroy existing charts if exist
             if (priceChart) priceChart.destroy();
             if (volumeChart) volumeChart.destroy();
+            if (rsiChart) rsiChart.destroy();
             
             // Extract closing prices from daily_data
             const prices = data.daily_data.map(item => item.close);
@@ -134,7 +148,7 @@
                                 meta.data.forEach((point, index) => {
                                     const score = dataset.data[index].score;
                                     const {x, y} = point.getProps(['x', 'y']);
-                                    const size = 8;
+                                    const size = 4;
                                     
                                     if (score > 0) {
                                         drawTriangleUp(ctx, x, y, size, 'green');
@@ -163,6 +177,24 @@
                             fill: false,
                             pointRadius: 0,
                             pointHitRadius: 20
+                        },
+                        {
+                            label: '5-day MA',
+                            data: data.indicators.ma_5,
+                            borderColor: 'orange',
+                            borderWidth: 1,
+                            borderDash: [5, 5],
+                            fill: false,
+                            pointRadius: 0
+                        },
+                        {
+                            label: '20-day MA',
+                            data: data.indicators.ma_20,
+                            borderColor: 'purple',
+                            borderWidth: 1,
+                            borderDash: [5, 5],
+                            fill: false,
+                            pointRadius: 0
                         },
                         {
                             label: 'Signals',
@@ -228,29 +260,6 @@
                 }
             });
             
-            // Add moving averages to price chart
-            priceChart.data.datasets.push({
-                label: '5-day MA',
-                data: data.indicators.ma_5,
-                borderColor: 'orange',
-                borderWidth: 1,
-                borderDash: [5, 5],
-                fill: false,
-                pointRadius: 0
-            });
-            
-            priceChart.data.datasets.push({
-                label: '20-day MA',
-                data: data.indicators.ma_20,
-                borderColor: 'purple',
-                borderWidth: 1,
-                borderDash: [5, 5],
-                fill: false,
-                pointRadius: 0
-            });
-            
-            priceChart.update();
-            
             // RSI chart
             rsiChart = new Chart(rsiChartCtx, {
                 type: 'line',
@@ -301,12 +310,16 @@
             });
         }
         
-        // Initialize
-        loadData();
+        // Initialize with default values
+        loadData(companySelector.value, daysSelector.value);
         
         // Event listeners
         companySelector.addEventListener('change', (e) => {
-            loadData(e.target.value);
+            loadData(e.target.value, daysSelector.value);
+        });
+        
+        daysSelector.addEventListener('change', (e) => {
+            loadData(companySelector.value, e.target.value);
         });
     </script>
 </body>
