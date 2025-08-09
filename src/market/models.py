@@ -1,7 +1,6 @@
 from django.db import models
 from timescale.db.models.fields import TimescaleDateTimeField
 from timescale.db.models.managers import TimescaleManager
-from . import tasks
 
 
 # Create your models here.
@@ -16,6 +15,7 @@ class Company(models.Model):
     def save(self, *args, **kwargs):
         self.ticker = f"{self.ticker}".upper()
         super().save(*args, **kwargs)
+        from . import tasks
         tasks.sync_company_stock_quotes.delay(self.pk)
 
 
@@ -52,4 +52,16 @@ class StockQuote(models.Model):
     class Meta:
         unique_together = [('company', 'time')]
     
- 
+
+class StockIndicator(models.Model):
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="stock_indicators"
+    )
+    time = TimescaleDateTimeField(interval="1 day")
+    score = models.DecimalField(max_digits=10, decimal_places=4)
+    indicators = models.JSONField()
+    
+    class Meta:
+        unique_together = [('company', 'time')]
