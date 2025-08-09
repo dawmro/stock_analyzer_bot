@@ -6,12 +6,17 @@
     <style>
         .chart-container {
             width: 90%;
-            height: 70vh;
+            height: 50vh;
             margin: 20px auto;
         }
         .volume-container {
             width: 90%;
-            height: 30vh;
+            height: 20vh;
+            margin: 20px auto;
+        }
+        .rsi-container {
+            width: 90%;
+            height: 20vh;
             margin: 20px auto;
         }
         .controls {
@@ -46,15 +51,20 @@
     <div class="volume-container">
         <canvas id="volume-chart"></canvas>
     </div>
+    
+    <div class="rsi-container">
+        <canvas id="rsi-chart"></canvas>
+    </div>
 
     <script>
         // DOM elements
         const companySelector = document.getElementById('company-selector');
         const priceChartCtx = document.getElementById('price-chart').getContext('2d');
         const volumeChartCtx = document.getElementById('volume-chart').getContext('2d');
+        const rsiChartCtx = document.getElementById('rsi-chart').getContext('2d');
         
         // Chart instances
-        let priceChart, volumeChart;
+        let priceChart, volumeChart, rsiChart;
         
         // Custom triangle drawing functions
         function drawTriangleUp(ctx, x, y, size, color) {
@@ -212,6 +222,78 @@
                             title: {
                                 display: true,
                                 text: 'Volume'
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Add moving averages to price chart
+            priceChart.data.datasets.push({
+                label: '5-day MA',
+                data: data.indicators.ma_5,
+                borderColor: 'orange',
+                borderWidth: 1,
+                borderDash: [5, 5],
+                fill: false,
+                pointRadius: 0
+            });
+            
+            priceChart.data.datasets.push({
+                label: '20-day MA',
+                data: data.indicators.ma_20,
+                borderColor: 'purple',
+                borderWidth: 1,
+                borderDash: [5, 5],
+                fill: false,
+                pointRadius: 0
+            });
+            
+            priceChart.update();
+            
+            // RSI chart
+            rsiChart = new Chart(rsiChartCtx, {
+                type: 'line',
+                data: {
+                    labels: data.dates,
+                    datasets: [
+                        {
+                            label: 'RSI',
+                            data: data.indicators.rsi,
+                            borderColor: 'blue',
+                            borderWidth: 2,
+                            fill: false,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Overbought',
+                            data: Array(data.dates.length).fill(70),
+                            borderColor: 'red',
+                            borderWidth: 1,
+                            borderDash: [5, 5],
+                            fill: false,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Oversold',
+                            data: Array(data.dates.length).fill(30),
+                            borderColor: 'green',
+                            borderWidth: 1,
+                            borderDash: [5, 5],
+                            fill: false,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 100,
+                            ticks: {
+                                stepSize: 10
                             }
                         }
                     }
