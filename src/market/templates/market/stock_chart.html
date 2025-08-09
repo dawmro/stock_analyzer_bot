@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stock Analysis Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .chart-container {
+            width: 90%;
+            height: 70vh;
+            margin: 20px auto;
+        }
+        .volume-container {
+            width: 90%;
+            height: 30vh;
+            margin: 20px auto;
+        }
+        .controls {
+            text-align: center;
+            padding: 20px;
+        }
+        .signal-info {
+            text-align: center;
+            margin: 10px;
+        }
+        .signal-buy { color: green; }
+        .signal-sell { color: red; }
+        .signal-hold { color: gray; }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <select id="company-selector">
+            <option value="X:BTCUSD">X:BTCUSD</option>
+        </select>
+        <div class="signal-info">
+            <span class="signal-buy">▲ Buy</span> | 
+            <span class="signal-sell">▼ Sell</span> | 
+            <span class="signal-hold">● Hold</span>
+        </div>
+    </div>
+    
+    <div class="chart-container">
+        <canvas id="price-chart"></canvas>
+    </div>
+    
+    <div class="volume-container">
+        <canvas id="volume-chart"></canvas>
+    </div>
+
+    <script>
+        // DOM elements
+        const companySelector = document.getElementById('company-selector');
+        const priceChartCtx = document.getElementById('price-chart').getContext('2d');
+        const volumeChartCtx = document.getElementById('volume-chart').getContext('2d');
+        
+        // Chart instances
+        let priceChart, volumeChart;
+        
+        // Custom triangle drawing functions
+        function drawTriangleUp(ctx, x, y, size, color) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(x, y - size);
+            ctx.lineTo(x - size, y + size);
+            ctx.lineTo(x + size, y + size);
+            ctx.closePath();
+            ctx.fill();
+        }
+        
+        function drawTriangleDown(ctx, x, y, size, color) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(x, y + size);
+            ctx.lineTo(x - size, y - size);
+            ctx.lineTo(x + size, y - size);
+            ctx.closePath();
+            ctx.fill();
+        }
+        
+        // Fetch data and render chart
+        async function loadData(ticker = 'X:BTCUSD') {
+            try {
+                const response = await fetch(`/market/api/stock-data/${ticker}/`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error(data.error);
+                    return;
+                }
+                
+                renderCharts(data);
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            }
+        }
+        
+        // Render charts with data
+        function renderCharts(data) {
+            // Destroy existing charts if exist
+            if (priceChart) priceChart.destroy();
+            if (volumeChart) volumeChart.destroy();
+            
+            // Extract closing prices from daily_data
+            const prices = data.daily_data.map(item => item.close);
+            
+            // Create signal points with custom drawing
+            const signalPoints = data.scores.map((score, i) => {
+                return {
+                    x: data.dates[i],
+                    y: prices[i],
+                    score: score
+                };
+            });
+            
+            // Price chart
+            priceChart = new Chart(priceChartCtx, {
+                plugins: [{
+                    id: 'signalDrawer',
+                    afterDraw: (chart) => {
+                        const ctx = chart.ctx;
+                        chart.data.datasets.forEach((dataset, datasetIndex) => {
+                            if (dataset.label === 'Signals') {
+                                const meta = chart.getDatasetMeta(datasetIndex);
+                                meta.data.forEach((point, index) => {
+                                    const score = dataset.data[index].score;
+                                    const {x, y} = point.getProps(['x', 'y']);
+                                    const size = 8;
+                                    
+                                    if (score > 0) {
+                                        drawTriangleUp(ctx, x, y, size, 'green');
+                                    } else if (score < 0) {
+                                        drawTriangleDown(ctx, x, y, size, 'red');
+                                    } else {
+                                        ctx.fillStyle = 'gray';
+                                        ctx.beginPath();
+                                        ctx.arc(x, y, size/2, 0, Math.PI * 2);
+                                        ctx.fill();
+                                    }
+                                });
+                            }
+                        });
+                    }
+                }],
+                type: 'line',
+                data: {
+                    labels: data.dates,
+                    datasets: [
+                        {
+                            label: 'Closing Price',
+                            data: prices,
+                            borderColor: 'blue',
+                            borderWidth: 2,
+                            fill: false,
+                            pointRadius: 0,
+                            pointHitRadius: 20
+                        },
+                        {
+                            label: 'Signals',
+                            data: signalPoints,
+                            type: 'scatter',
+                            pointRadius: 0,
+                            pointHitRadius: 20
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label || '';
+                                    if (label === 'Signals') {
+                                        const score = data.scores[context.dataIndex];
+                                        if (score > 0) return '▲ Buy Signal';
+                                        if (score < 0) return '▼ Sell Signal';
+                                        return '● Hold Signal';
+                                    }
+                                    return `${label}: ${context.parsed.y}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Volume chart
+            volumeChart = new Chart(volumeChartCtx, {
+                type: 'bar',
+                data: {
+                    labels: data.dates,
+                    datasets: [{
+                        label: 'Daily Volume',
+                        data: data.volumes,
+                        backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Volume'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Initialize
+        loadData();
+        
+        // Event listeners
+        companySelector.addEventListener('change', (e) => {
+            loadData(e.target.value);
+        });
+    </script>
+</body>
+</html>
