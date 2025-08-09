@@ -43,4 +43,20 @@ class StockQuoteAdmin(admin.ModelAdmin):
 
 
 
+from .models import StockIndicator
+
+class StockIndicatorAdmin(admin.ModelAdmin):
+    list_display = ['company_ticker', 'time', 'score']
+    list_filter = [
+        'company__ticker', 
+        ('time', DateTimeRangeFilterBuilder()),
+    ]
+    readonly_fields = ['indicators']
+    
+    def company_ticker(self, obj):
+        return obj.company.ticker
+    company_ticker.short_description = 'Ticker'
+    company_ticker.admin_order_field = 'company__ticker'
+
 admin.site.register(StockQuote, StockQuoteAdmin)
+admin.site.register(StockIndicator, StockIndicatorAdmin)
