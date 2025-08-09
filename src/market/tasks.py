@@ -61,32 +61,25 @@ def sync_company_stock_quotes(company_id, days_ago=32, batch_days_size=32, date_
     to_date = start_date + timedelta(days=batch_days_size + 1)
     to_date = to_date.strftime(date_format)
 
-    # Initialize Polygon API client and fetch data with error handling
-    try:
-        client = helper_clients.PolygonAPIClient(
-            ticker=ticker, 
-            multiplier=multiplier,
-            timespan=timespan,
-            from_date=from_date, 
-            to_date=to_date
-        )
-        dataset = client.get_stock_data()
-        
-        if verbose:
-            print(f"Syncing {len(dataset)} stock quotes for {ticker} from {from_date} to {to_date}...")
-        
-        # Insert fetched data into database
-        batch_insert_stock_data(dataset=dataset, company_obj=company_obj, verbose=verbose)
-        
-        if verbose:
-            print(f"Done syncing {len(dataset)} stock quotes for {ticker} from {from_date} to {to_date}.")
-            
-    except Exception as e:
-        # Handle API errors
-        error_msg = f"Failed to sync stock quotes for {ticker}: {str(e)}"
-        if verbose:
-            print(error_msg)
-        raise Exception(error_msg)
+    # Initialize Polygon API client and fetch data
+    client = helper_clients.PolygonAPIClient(
+        ticker=ticker, 
+        multiplier=multiplier,
+        timespan=timespan,
+        from_date=from_date, 
+        to_date=to_date
+    )
+    dataset = client.get_stock_data()
+    
+    if verbose:
+        print(f"Syncing {len(dataset)} stock quotes for {ticker} from {from_date} to {to_date}...")
+    
+    # Insert fetched data into database
+    batch_insert_stock_data(dataset=dataset, company_obj=company_obj, verbose=verbose)
+    
+    if verbose:
+        print(f"Done syncing {len(dataset)} stock quotes for {ticker} from {from_date} to {to_date}.")
+
 
 
 @shared_task    
