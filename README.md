@@ -1,7 +1,7 @@
 # stock_analyzer_bot
 A comprehensive system for extracting financial data, performing advanced analytics, and generating actionable trading insights - powered by Django, Celery, TimescaleDB, Jupyter, OpenAI, and few more.
 
-![alt text](https://github.com/dawmro/stock_analyzer_bot/blob/main/image/chart_1.PNG)
+
 
 
 ## Setup:
