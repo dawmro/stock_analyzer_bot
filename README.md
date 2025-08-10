@@ -50,7 +50,9 @@ celery -A sab_home worker -l info
 4. Create periodic tasks in django admin:
 ![alt text](https://github.com/dawmro/stock_analyzer_bot/blob/main/image/periodic_task_1.PNG)
 
-5. Wait for task to synchronize data.
+5. Wait for task to synchronize data:
+![alt text](https://github.com/dawmro/stock_analyzer_bot/blob/main/image/celery_1.PNG)
+
 6. Got to:
 ```
 http://localhost:8000/market/chart/
