@@ -10,7 +10,9 @@ def stock_chart_view(request):
     """
     View to render stock chart page
     """
-    return render(request, 'market/stock_chart.html')
+    # Get all active companies ordered by ticker
+    companies = Company.objects.filter(active=True).order_by('ticker')
+    return render(request, 'market/stock_chart.html', {'companies': companies})
 
 def stock_data_api(request, ticker="X:BTCUSD"):
     """

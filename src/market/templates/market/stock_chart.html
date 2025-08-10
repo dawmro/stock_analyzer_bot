@@ -38,7 +38,13 @@
 <body>
     <div class="controls">
         <select id="company-selector">
-            <option value="X:BTCUSD">X:BTCUSD</option>
+            {% if companies %}
+                {% for company in companies %}
+                    <option value="{{ company.ticker }}">{{ company.ticker }} - {{ company.name }}</option>
+                {% endfor %}
+            {% else %}
+                <option value="">No companies available</option>
+            {% endif %}
         </select>
         
         <select id="days-selector" class="days-selector">
