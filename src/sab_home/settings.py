@@ -21,10 +21,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-y0gkxvvu6krv&pnl94tyh_ry2c@=2_7ox)p+t06o5m%bf-b2cf'
+SECRET_KEY = config('DJANGO_SECRET_KEY')  # Read from environment variable
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config('DJANGO_DEBUG', default=False, cast=bool)
+
+# Production security settings
+if not DEBUG:
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 OPENAI_API_KEY = config('OPENAI_API_KEY', default=None)
 
@@ -193,3 +200,31 @@ CELERY_BROKER_CONNECTION_RETRY = True
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_REDIS_BACKEND_USE_SSL = False
 CELERY_BROKER_USE_SSL = False
+
+# Ensure logs directory exists
+log_dir = BASE_DIR / 'logs'
+log_dir.mkdir(exist_ok=True)  # Create directory if not exists
+
+# Logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+        'file': {
+            'level': 'ERROR',
+            'class': 'logging.FileHandler',
+            'filename': log_dir / 'errors.log',  # Use the created path
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'INFO',
+    },
+}
+
+# Validate security in development
+if DEBUG and SECRET_KEY.startswith('insecure'):
+    raise ValueError("Insecure SECRET_KEY not allowed in DEBUG mode")
