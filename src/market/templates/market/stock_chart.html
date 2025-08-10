@@ -133,13 +133,27 @@
             // Extract closing prices from daily_data
             const prices = data.daily_data.map(item => item.close);
             
-            // Create signal points with custom drawing
-            const signalPoints = data.scores.map((score, i) => {
-                return {
-                    x: data.dates[i],
-                    y: prices[i],
-                    score: score
-                };
+            // Create signal points with custom drawing (skip null values)
+            const signalPoints = [];
+            data.scores.forEach((score, i) => {
+                if (score !== null) {
+                    signalPoints.push({
+                        x: data.dates[i],
+                        y: prices[i],
+                        score: score
+                    });
+                }
+            });
+            
+            // Add missing data indicator points
+            const missingPoints = [];
+            data.scores.forEach((score, i) => {
+                if (score === null) {
+                    missingPoints.push({
+                        x: data.dates[i],
+                        y: prices[i]
+                    });
+                }
             });
             
             // Price chart
@@ -208,6 +222,17 @@
                             type: 'scatter',
                             pointRadius: 0,
                             pointHitRadius: 20
+                        },
+                        {
+                            label: 'Missing Indicators',
+                            data: missingPoints,
+                            type: 'scatter',
+                            pointStyle: 'crossRot',
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            backgroundColor: 'rgba(200, 200, 200, 0.7)',
+                            borderColor: 'rgba(100, 100, 100, 0.7)',
+                            borderWidth: 1
                         }
                     ]
                 },
@@ -224,12 +249,15 @@
                             callbacks: {
                                 label: function(context) {
                                     const label = context.dataset.label || '';
-                                    if (label === 'Signals') {
-                                        const score = data.scores[context.dataIndex];
-                                        if (score > 0) return '▲ Buy Signal';
-                                        if (score < 0) return '▼ Sell Signal';
-                                        return '● Hold Signal';
-                                    }
+                                if (label === 'Signals') {
+                                    const score = data.scores[context.dataIndex];
+                                    if (score > 0) return '▲ Buy Signal';
+                                    if (score < 0) return '▼ Sell Signal';
+                                    return '● Hold Signal';
+                                }
+                                if (label === 'Missing Indicators') {
+                                    return 'Missing indicator data for this date';
+                                }
                                     return `${label}: ${context.parsed.y}`;
                                 }
                             }

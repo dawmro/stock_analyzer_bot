@@ -70,6 +70,15 @@ def stock_data_api(request, ticker="X:BTCUSD"):
         .order_by('date')
     )
     
+    # Create indicator dictionary for quick lookup
+    indicator_dict = {}
+    for indicator in indicators:
+        date_str = indicator.date.strftime("%Y-%m-%d")
+        indicator_dict[date_str] = {
+            "score": float(indicator.score),
+            "indicators": indicator.indicators
+        }
+    
     # Prepare data structure
     data = {
         "dates": [],
@@ -83,9 +92,10 @@ def stock_data_api(request, ticker="X:BTCUSD"):
         }
     }
     
-    # Process daily quotes
+    # Process daily quotes and match indicators
     for quote in daily_quotes:
-        data["dates"].append(quote['date'].strftime("%Y-%m-%d"))
+        date_str = quote['date'].strftime("%Y-%m-%d")
+        data["dates"].append(date_str)
         data["daily_data"].append({
             "open": float(quote['open']),
             "high": float(quote['high']),
@@ -93,13 +103,20 @@ def stock_data_api(request, ticker="X:BTCUSD"):
             "close": float(quote['close'])
         })
         data["volumes"].append(float(quote['volume']))
-    
-    # Process indicators
-    for indicator in indicators:
-        data["scores"].append(float(indicator.score))
-        ind_data = indicator.indicators
-        data["indicators"]["ma_5"].append(ind_data.get("ma_5"))
-        data["indicators"]["ma_20"].append(ind_data.get("ma_20"))
-        data["indicators"]["rsi"].append(ind_data.get("rsi"))
+        
+        # Get indicator for this date if available
+        indicator = indicator_dict.get(date_str)
+        if indicator:
+            data["scores"].append(indicator["score"])
+            ind_data = indicator["indicators"]
+            data["indicators"]["ma_5"].append(ind_data.get("ma_5"))
+            data["indicators"]["ma_20"].append(ind_data.get("ma_20"))
+            data["indicators"]["rsi"].append(ind_data.get("rsi"))
+        else:
+            # Add placeholders for missing indicators
+            data["scores"].append(None)
+            data["indicators"]["ma_5"].append(None)
+            data["indicators"]["ma_20"].append(None)
+            data["indicators"]["rsi"].append(None)
     
     return JsonResponse(data)
