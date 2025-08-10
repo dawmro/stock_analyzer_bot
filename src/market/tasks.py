@@ -1,5 +1,6 @@
 import helpers.clients as helper_clients
 import math
+import logging
 
 from celery import shared_task
 from django.apps import apps
@@ -7,6 +8,8 @@ from django.utils import timezone
 from datetime import timedelta, timezone as datetime_timezone
 from .services import get_stock_indicators
 from .utils import batch_insert_stock_data, batch_insert_stock_indicators
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task
@@ -72,13 +75,13 @@ def sync_company_stock_quotes(company_id, days_ago=32, batch_days_size=32, date_
     dataset = client.get_stock_data()
     
     if verbose:
-        print(f"Syncing {len(dataset)} stock quotes for {ticker} from {from_date} to {to_date}...")
+        logger.info(f"Syncing {len(dataset)} stock quotes for {ticker} from {from_date} to {to_date}...")
     
     # Insert fetched data into database
     batch_insert_stock_data(dataset=dataset, company_obj=company_obj, verbose=verbose)
     
     if verbose:
-        print(f"Done syncing {len(dataset)} stock quotes for {ticker} from {from_date} to {to_date}.")
+        logger.info(f"Done syncing {len(dataset)} stock quotes for {ticker} from {from_date} to {to_date}.")
 
 
 
@@ -149,18 +152,17 @@ def sync_historical_stock_data(years_ago=2, company_ids=[], verbose=True):
         batch_days_size = 30  # 30-day chunks to stay under API limits
         
         # Schedule sync tasks in reverse chronological order
-        # Note: This loop has an off-by-one issue:
-        #   - Misses the most recent period (0-30 days)
-        #   - May skip a partial chunk at the end of the range
-        for i in range(batch_days_size, starting_days_ago, batch_days_size):
-            if verbose:
-                print(f"Starting syncing {company_id} stock quotes from {i-batch_days_size+1} to {i} days ago...")
+        for start_offset in range(0, starting_days_ago, batch_days_size):
+            end_offset = min(start_offset + batch_days_size, starting_days_ago)
+            chunk_size = end_offset - start_offset
             
-            # Schedule async task for this date range
+            if verbose:
+                logger.info(f"Starting syncing {company_id} stock quotes from {start_offset} to {end_offset} days ago...")
+            
             sync_company_stock_quotes.delay(
                 company_id, 
-                days_ago=i, 
-                batch_days_size=batch_days_size
+                days_ago=end_offset, 
+                batch_days_size=chunk_size
             )
 
 @shared_task
@@ -175,12 +177,12 @@ def generate_historical_indicators(n_days=700, verbose=True):
     StockIndicator = apps.get_model('market', 'StockIndicator')
     
     if verbose:
-        print("Starting historical indicators generation...")
+        logger.info("Starting historical indicators generation...")
     
     # Get all active companies
     companies = Company.objects.filter(active=True)
     if verbose:
-        print(f"Processing {companies.count()} active companies")
+        logger.info(f"Processing {companies.count()} active companies")
     
     # Calculate date range (n_days back from now)
     end_date = timezone.now()
@@ -188,7 +190,7 @@ def generate_historical_indicators(n_days=700, verbose=True):
     total_days = (end_date - start_date).days + 1
     
     if verbose:
-        print(f"Processing {total_days} days from {start_date} to {end_date}")
+        logger.info(f"Processing {total_days} days from {start_date} to {end_date}")
     
         # Prefetch existing indicator dates as date objects (without time)
         existing_dates = {}
@@ -202,7 +204,7 @@ def generate_historical_indicators(n_days=700, verbose=True):
         # Iterate through each company
         for company in companies:
             if verbose:
-                print(f"Processing company: {company.ticker}")
+                logger.info(f"Processing company: {company.ticker}")
             
             indicators_to_insert = []
             skipped_days = 0
@@ -217,7 +219,7 @@ def generate_historical_indicators(n_days=700, verbose=True):
                 day_count += 1
                 # Print progress every 100 day
                 if verbose and day_count % 100 == 0:
-                    print(f"Processed {day_count} days for {company.ticker} so far...")
+                    logger.info(f"Processed {day_count} days for {company.ticker} so far...")
                 
                 # Check if indicator already exists using pre-fetched data
                 if current_date.date() in company_existing_dates:
@@ -239,7 +241,7 @@ def generate_historical_indicators(n_days=700, verbose=True):
                     
                     if result is None:
                         if verbose:
-                            print(f"Skipping {company.ticker} on {current_date}: get_stock_indicators returned None")
+                            logger.warning(f"Skipping {company.ticker} on {current_date}: get_stock_indicators returned None")
                         continue
                     
                     # Prepare data for batch insertion
@@ -251,7 +253,7 @@ def generate_historical_indicators(n_days=700, verbose=True):
                     
                 except Exception as e:
                     # Handle errors per company/date
-                    print(f"Error for {company.ticker} on {current_date}: {str(e)}")
+                    logger.error(f"Error for {company.ticker} on {current_date}: {str(e)}")
                 
                 current_date += timedelta(days=1)
             
@@ -263,10 +265,10 @@ def generate_historical_indicators(n_days=700, verbose=True):
                     verbose=verbose
                 )
                 if verbose:
-                    print(f"Inserted {processed} indicators for {company.ticker}")
+                    logger.info(f"Inserted {processed} indicators for {company.ticker}")
             
             if verbose:
-                print(f"Skipped {skipped_days} days for {company.ticker} (already exists)")
+                logger.info(f"Skipped {skipped_days} days for {company.ticker} (already exists)")
         
     if verbose:
-        print("Finished generating historical indicators")
+        logger.info("Finished generating historical indicators")
