@@ -4,6 +4,21 @@
     <title>Stock Analysis Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* Responsive media queries */
+        @media (max-width: 768px) {
+            .top-bar {
+                flex-direction: column;
+                align-items: center;
+                gap: 20px;
+            }
+            .left-controls, .right-recommendation {
+                width: 100%;
+            }
+            .chart-container, .volume-container, .rsi-container {
+                height: 40vh;
+            }
+        }
+        
         /* Top bar for controls */
         .top-bar {
             display: flex;
@@ -75,6 +90,7 @@
         <div class="left-controls">
             <!-- Ticker and days selection -->
             <div class="controls">
+                <label for="company-selector">Company:</label>
                 <select id="company-selector">
                     {% if companies %}
                         {% for company in companies %}
@@ -85,6 +101,7 @@
                     {% endif %}
                 </select>
                 
+                <label for="days-selector">Time Range:</label>
                 <select id="days-selector" class="days-selector">
                     <option value="30">30 days</option>
                     <option value="60">60 days</option>
