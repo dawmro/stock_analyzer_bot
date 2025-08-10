@@ -251,7 +251,9 @@
                                     const label = context.dataset.label || '';
                                 if (label === 'Signals') {
                                     const score = data.scores[context.dataIndex];
+                                    if (score > 1) return '▲▲ Strong Buy Signal';
                                     if (score > 0) return '▲ Buy Signal';
+                                    if (score < -1) return '▼▼ Strong Sell Signal';
                                     if (score < 0) return '▼ Sell Signal';
                                     return '● Hold Signal';
                                 }
