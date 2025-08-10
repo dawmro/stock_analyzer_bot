@@ -9,6 +9,22 @@
             height: 50vh;
             margin: 20px auto;
         }
+        
+        /* LLM Recommendation Box */
+        .recommendation-box {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 300px;
+            z-index: 100;
+        }
+        .rec-buy { background: #e8f5e9; color: #2e7d32; }
+        .rec-sell { background: #ffebee; color: #c62828; }
+        .rec-hold { background: #f5f5f5; color: #616161; }
+        .rec-hidden { display: none; }
+        
         .volume-container {
             width: 90%;
             height: 20vh;
@@ -36,6 +52,9 @@
     </style>
 </head>
 <body>
+    <!-- LLM Recommendation Display -->
+    <div id="llm-recommendation" class="recommendation-box rec-hidden"></div>
+    
     <div class="controls">
         <select id="company-selector">
             {% if companies %}
@@ -106,6 +125,36 @@
             ctx.fill();
         }
         
+        // Update LLM recommendation display
+        function updateRecommendation(rec) {
+            const box = document.getElementById('llm-recommendation');
+            if (!rec) {
+                box.classList.add('rec-hidden');
+                return;
+            }
+            
+            box.classList.remove('rec-hidden');
+            box.textContent = '';
+            
+            const title = document.createElement('strong');
+            let cls = 'rec-hold';
+            
+            if (rec.buy) {
+                title.textContent = 'BUY RECOMMENDATION';
+                cls = 'rec-buy';
+            } else if (rec.sell) {
+                title.textContent = 'SELL RECOMMENDATION';
+                cls = 'rec-sell';
+            } else {
+                title.textContent = 'HOLD RECOMMENDATION';
+            }
+            
+            box.appendChild(title);
+            box.appendChild(document.createElement('br'));
+            box.appendChild(document.createTextNode(rec.explanation));
+            box.className = `recommendation-box ${cls}`;
+        }
+        
         // Fetch data and render chart
         async function loadData(ticker = 'X:BTCUSD', days = 30) {
             try {
@@ -115,6 +164,13 @@
                 if (data.error) {
                     console.error(data.error);
                     return;
+                }
+                
+                // Update recommendation display
+                if (data.llm_recommendation) {
+                    updateRecommendation(data.llm_recommendation);
+                } else {
+                    updateRecommendation(null);
                 }
                 
                 renderCharts(data);

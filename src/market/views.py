@@ -5,6 +5,7 @@ from datetime import timedelta
 from django.db.models import Min, Max, Sum
 from django.db.models.functions import TruncDate
 from .models import Company, StockQuote, StockIndicator
+from .recommendation_service.recommendation_service import get_llm_recommendation
 
 def stock_chart_view(request):
     """
@@ -119,4 +120,11 @@ def stock_data_api(request, ticker="X:BTCUSD"):
             data["indicators"]["ma_20"].append(None)
             data["indicators"]["rsi"].append(None)
     
+    # Get LLM recommendation for current ticker
+    recommendation = get_llm_recommendation(ticker)
+    if recommendation:
+        data['llm_recommendation'] = recommendation
+    else:
+        data['llm_recommendation'] = None
+
     return JsonResponse(data)
