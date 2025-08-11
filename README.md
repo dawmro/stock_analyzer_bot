@@ -33,6 +33,10 @@ python manage.py migrate
 ```
 python manage.py createsuperuser
 ```
+8. Create Selected stocks using:
+```
+nbs/11 - Verify Stock Sync.ipynb
+```
 
 ## Run
 1. Run django server:
